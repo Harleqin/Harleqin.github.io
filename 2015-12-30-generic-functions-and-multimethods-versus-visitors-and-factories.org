@@ -530,8 +530,9 @@ The only reason that it is not really an antipattern is that there are no good
 alternatives in sight when you must use Java.
 
 I welcome all feedback, including demonstrations of solutions in other
-languages.  Just open an issue at
-http://github.com/Harleqin/Harleqin.github.io/issues.
+languages.  Just use the wiki at
+https://github.com/Harleqin/Harleqin.github.io/wiki.
+
 
 
 Yours aye
