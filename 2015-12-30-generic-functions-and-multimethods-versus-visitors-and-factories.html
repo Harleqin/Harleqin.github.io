@@ -1,0 +1,837 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Generic functions and multimethods versus visitors and factories</title>
+<!-- 2015-12-30 Mi 23:31 -->
+<meta  charset="utf-8">
+<meta  name="generator" content="Org-mode">
+<meta  name="author" content="Svante">
+<style type="text/css">
+ <!--/*--><![CDATA[/*><!--*/
+  .title  { text-align: center; }
+  .todo   { font-family: monospace; color: red; }
+  .done   { color: green; }
+  .tag    { background-color: #eee; font-family: monospace;
+            padding: 2px; font-size: 80%; font-weight: normal; }
+  .timestamp { color: #bebebe; }
+  .timestamp-kwd { color: #5f9ea0; }
+  .right  { margin-left: auto; margin-right: 0px;  text-align: right; }
+  .left   { margin-left: 0px;  margin-right: auto; text-align: left; }
+  .center { margin-left: auto; margin-right: auto; text-align: center; }
+  .underline { text-decoration: underline; }
+  #postamble p, #preamble p { font-size: 90%; margin: .2em; }
+  p.verse { margin-left: 3%; }
+  pre {
+    border: 1px solid #ccc;
+    box-shadow: 3px 3px 3px #eee;
+    padding: 8pt;
+    font-family: monospace;
+    overflow: auto;
+    margin: 1.2em;
+  }
+  pre.src {
+    position: relative;
+    overflow: visible;
+    padding-top: 1.2em;
+  }
+  pre.src:before {
+    display: none;
+    position: absolute;
+    background-color: white;
+    top: -10px;
+    right: 10px;
+    padding: 3px;
+    border: 1px solid black;
+  }
+  pre.src:hover:before { display: inline;}
+  pre.src-sh:before    { content: 'sh'; }
+  pre.src-bash:before  { content: 'sh'; }
+  pre.src-emacs-lisp:before { content: 'Emacs Lisp'; }
+  pre.src-R:before     { content: 'R'; }
+  pre.src-perl:before  { content: 'Perl'; }
+  pre.src-java:before  { content: 'Java'; }
+  pre.src-sql:before   { content: 'SQL'; }
+
+  table { border-collapse:collapse; }
+  caption.t-above { caption-side: top; }
+  caption.t-bottom { caption-side: bottom; }
+  td, th { vertical-align:top;  }
+  th.right  { text-align: center;  }
+  th.left   { text-align: center;   }
+  th.center { text-align: center; }
+  td.right  { text-align: right;  }
+  td.left   { text-align: left;   }
+  td.center { text-align: center; }
+  dt { font-weight: bold; }
+  .footpara:nth-child(2) { display: inline; }
+  .footpara { display: block; }
+  .footdef  { margin-bottom: 1em; }
+  .figure { padding: 1em; }
+  .figure p { text-align: center; }
+  .inlinetask {
+    padding: 10px;
+    border: 2px solid gray;
+    margin: 10px;
+    background: #ffffcc;
+  }
+  #org-div-home-and-up
+   { text-align: right; font-size: 70%; white-space: nowrap; }
+  textarea { overflow-x: auto; }
+  .linenr { font-size: smaller }
+  .code-highlighted { background-color: #ffff00; }
+  .org-info-js_info-navigation { border-style: none; }
+  #org-info-js_console-label
+    { font-size: 10px; font-weight: bold; white-space: nowrap; }
+  .org-info-js_search-highlight
+    { background-color: #ffff00; color: #000000; font-weight: bold; }
+  /*]]>*/-->
+</style>
+<style>body {max-width: 42em; margin: 0 auto;}</style>
+<style>#content {padding: 1em; background-color: #ddd;}</style>
+<script type="text/javascript">
+/*
+@licstart  The following is the entire license notice for the
+JavaScript code in this tag.
+
+Copyright (C) 2012-2013 Free Software Foundation, Inc.
+
+The JavaScript code in this tag is free software: you can
+redistribute it and/or modify it under the terms of the GNU
+General Public License (GNU GPL) as published by the Free Software
+Foundation, either version 3 of the License, or (at your option)
+any later version.  The code is distributed WITHOUT ANY WARRANTY;
+without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE.  See the GNU GPL for more details.
+
+As additional permission under GNU GPL version 3 section 7, you
+may distribute non-source (e.g., minimized or compacted) forms of
+that code without the copy of the GNU GPL normally required by
+section 4, provided you include this license notice and a URL
+through which recipients can access the Corresponding Source.
+
+
+@licend  The above is the entire license notice
+for the JavaScript code in this tag.
+*/
+<!--/*--><![CDATA[/*><!--*/
+ function CodeHighlightOn(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(null != target) {
+     elem.cacheClassElem = elem.className;
+     elem.cacheClassTarget = target.className;
+     target.className = "code-highlighted";
+     elem.className   = "code-highlighted";
+   }
+ }
+ function CodeHighlightOff(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(elem.cacheClassElem)
+     elem.className = elem.cacheClassElem;
+   if(elem.cacheClassTarget)
+     target.className = elem.cacheClassTarget;
+ }
+/*]]>*///-->
+</script>
+</head>
+<body>
+<div id="org-div-home-and-up">
+ <a accesskey="h" href="https://Harleqin.github.io/"> UP </a>
+ |
+ <a accesskey="H" href="https://Harleqin.github.io/"> HOME </a>
+</div><div id="content">
+<h1 class="title">Generic functions and multimethods versus visitors and factories</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#sec-1">1. Summary</a></li>
+<li><a href="#sec-2">2. Java</a></li>
+<li><a href="#sec-3">3. Common Lisp</a></li>
+<li><a href="#sec-4">4. Your thoughts</a></li>
+<li><a href="#sec-5">5. Comparison</a></li>
+<li><a href="#sec-6">6. Conclusion</a></li>
+</ul>
+</div>
+</div>
+<p>
+In the article “Synthesizing Object-Oriented and Functional Design to Promote
+Reuse” by Shriram Krishnamurthi et al. from 2003
+(<a href="http://www.cs.rice.edu/~cork/teachjava/2003/readings/visitor1.pdf">http://www.cs.rice.edu/~cork/teachjava/2003/readings/visitor1.pdf</a>) the authors
+propose a design pattern combining visitors with factory methods.
+</p>
+
+<p>
+I propose here that the problem they present is better solved through generic
+functions and multimethods.
+</p>
+
+<div id="outline-container-sec-1" class="outline-2">
+<h2 id="sec-1"><span class="section-number-2">1</span> Summary</h2>
+<div class="outline-text-2" id="text-1">
+<p>
+The concrete problem presented is one of those rather academic problems: a
+little class hierarchy based on shapes, and a few operations on them, the
+question being how to organize the code in such a way that extending it with a
+new class or with a new operation can be done without modification of existing
+code.
+</p>
+
+<p>
+The unspoken basic problem is to get (run-time) dispatch to the right method
+implementation for a given object, when (in “classical object-oriented”
+parlance) you cannot put the method into the object's class directly.
+</p>
+
+<p>
+The “classical object-oriented” solution proposed in the paper is roughly to use
+a visitor for selection of the right method and a factory method for selection
+of the right visitor.
+</p>
+
+<p>
+The solution I propose is to use generic functions and multimethods.  Generic
+functions and the methods defined on them can be written independently from the
+classes of the objects on which they operate.  They also do (run-time) dispatch
+on their arguments (in contrast to compile-time overloading).  The effect is
+that you “just call” the generic function on whatever objects occur at run-time,
+and the right method will be selected each time.  You can also write new methods
+for both generic functions and classes that are defined elsewhere, including the
+language standard.
+</p>
+
+<p>
+In the following, I'll write this out in code, first Java, then Common Lisp.
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-2" class="outline-2">
+<h2 id="sec-2"><span class="section-number-2">2</span> Java</h2>
+<div class="outline-text-2" id="text-2">
+<p>
+I use Java for the “classical” part, because it is the language from this family
+I am most familiar with.  In contrast to the article, I can use a more modern
+Java version that has “generics” (parametric polymorphism, has nothing to do
+with generic functions).
+</p>
+
+<p>
+First up, a little class hierarchy.  I use very basic language (no <code>final</code>
+declarations, no nullness annotations, and direct field access for <code>Point</code>), so
+that it stays somewhat readable on this page.
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-java">package shape;
+
+/**
+ * A basic shape class.  Shapes are centered at the origin by default.
+ */
+abstract class Shape {
+    &lt;T&gt; T accept (ShapeVisitor&lt;T&gt; visitor);
+}
+</pre>
+</div>
+
+<div class="org-src-container">
+
+<pre class="src src-java">package shape;
+
+class Square extends Shape {
+    private double width;
+
+    Shape (double width) {
+        this.width = width;
+    }
+
+    &lt;T&gt; T accept (ShapeVisitor&lt;T&gt; visitor) {
+        return visitor.visit( this );
+    }
+
+    double getWidth () {
+        return this.width;
+    }
+}
+</pre>
+</div>
+
+<div class="org-src-container">
+
+<pre class="src src-java">package shape;
+
+class Circle extends Shape {
+    private double radius;
+
+    Circle (double radius) {
+        this.radius = radius;
+    }
+
+    &lt;T&gt; T accept (ShapeVisitor&lt;T&gt; visitor) {
+        return visitor.visit( this );
+    }
+
+    double getRadius () {
+        return this.radius;
+    }
+}
+</pre>
+</div>
+
+<div class="org-src-container">
+
+<pre class="src src-java">package shape;
+
+/**
+ * This represents a translated shape.
+ */
+class Translated extends Shape {
+    private Shape shape;
+    private Point translation;
+
+    Translated (Shape shape, Point translation) {
+        this.shape = shape;
+        this.translation = translation;
+    }
+
+    &lt;T&gt; T accept (ShapeVisitor&lt;T&gt; visitor) {
+        return visitor.visit( this );
+    }
+
+    Shape getShape () {
+        return this.shape;
+    }
+
+    Point getTranslation () {
+        return this.translation;
+    }
+}
+</pre>
+</div>
+
+<p>
+This is a little helper:
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-java">package shape;
+
+/**
+ * A two-dimensional vector.
+ */
+class Point {
+    double x;
+    double y;
+
+    Point (double x, double y) {
+        this.x = x;
+        this.y = y;
+    }
+}
+</pre>
+</div>
+
+<p>
+We start out with one operation:
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-java">package shape;
+
+/**
+ * Interface for operations on shapes.  Implementations should have private
+ * constructors and factory methods, so that extensions to existing visitors can
+ * still be applied recursively.
+ */
+interface ShapeVisitor&lt;T&gt; {
+    T visit (Square square);
+    T visit (Circle circle);
+    T visit (Translated translated);
+}
+</pre>
+</div>
+
+<div class="org-src-container">
+
+<pre class="src src-java">package shape;
+
+class PointIn implements ShapeVisitor&lt;Boolean&gt; {
+    protected Point point;
+
+    private PointIn (Point point) {
+        this.point = point;
+    }
+
+    PointIn makePointIn (Point point) {
+        return new PointIn( point );
+    }
+
+    Boolean visit (Square square) {
+        return point.x &gt; -(square.getWidth / 2)
+            &amp;&amp; point.x &lt; (square.getWidth / 2)
+            &amp;&amp; point.y &gt; -(square.getWidth / 2)
+            &amp;&amp; point.y &lt; (square.getWidth / 2);
+    }
+
+    Boolean visit (Circle circle) {
+        return Math.sqrt( point.x ^ 2 + point.y ^ 2 ) &lt; circle.getRadius();
+    }
+
+    Boolean visit (Translated translated) {
+        Point translation = translated.getTranslation();
+        Point untranslatedPoint = new Point( this.point.x - translation.x,
+                                             this.point.y - translation.y );
+        return translated.getShape().accept( makePointIn( untranslatedPoint ) );
+    }
+}
+</pre>
+</div>
+
+<p>
+Now we add another operation:
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-java">package shape;
+
+class Shrink implements ShapeVisitor&lt;Shape&gt; {
+
+    protected double factor;
+
+    private Shrink (double factor) {
+        this.factor = factor;
+    }
+
+    Shrink makeShrink (double factor) {
+        if (factor == 0) {
+            throw new IllegalArgumentException();
+        }
+        return new Shrink&lt;Shape&gt;(factor);
+    }
+
+    Shape visit (Square square) {
+        return new Square( square.getWidth() / factor );
+    }
+
+    Shape visit (Circle circle) {
+        return new Circle( circle.getRadius() / factor );
+    }
+
+    Shape visit (Translated translated) {
+        return new Translated( translated.getShape().accept( makeShrink( factor ) ),
+                               translated.getTranslation() );
+    }
+}
+</pre>
+</div>
+
+<p>
+Finally, we add another class:
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-java">package shape;
+
+class Union extends Shape {
+    private Shape s0;
+    private Shape s1;
+
+    public Union (Shape s0, Shape s1) {
+        this.s0 = s0;
+        this.s1 = s1;
+    }
+
+    &lt;T&gt; accept (ShapeVisitor&lt;T&gt; visitor) {
+        // might throw a ClassCastException if improperly used
+        return ((UnionShapeVisitor) visitor).visit( this );
+    }
+
+    Shape getShape0 () {
+        return this.s0;
+    }
+
+    Shape getShape1 () {
+        return this.s1;
+    }
+}
+</pre>
+</div>
+
+<p>
+This needs extended visitors:
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-java">package shape;
+
+interface UnionShapeVisitor&lt;T&gt; extends ShapeVisitor&lt;T&gt; {
+    T visit (Union union);
+}
+</pre>
+</div>
+
+<div class="org-src-container">
+
+<pre class="src src-java">package shape;
+
+class PointInUnion extends PointIn implements UnionShapeVisitor&lt;Boolean&gt; {
+
+    private PointInUnion (Point point) {
+        this.point = point;
+    }
+
+    PointIn makePointIn (Point point) {
+        return new PointInUnion( point );
+    }
+
+    Boolean visit (Union union) {
+        return union.getShape0().accept( makePointIn( this.point ) )
+            || union.getShape1().accept( makePointIn( this.point ) );
+    }
+}
+</pre>
+</div>
+
+<div class="org-src-container">
+
+<pre class="src src-java">package shape;
+
+class ShrinkUnion extends Shrink implements UnionShapeVisitor&lt;Shape&gt; {
+
+    private ShrinkUnion (double factor) {
+        this.factor = factor;
+    }
+
+    Shrink makeShrink (double factor) {
+        return new ShrinkUnion( factor );
+    }
+
+    Shape visit (Union union) {
+        return new Union( union.getShape0().accept( makeShrink( this.factor ) ),
+                          union.getShape1().accept( makeShrink( this.factor ) ) );
+    }
+}
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-3" class="outline-2">
+<h2 id="sec-3"><span class="section-number-2">3</span> Common Lisp</h2>
+<div class="outline-text-2" id="text-3">
+<p>
+Here is the same problem solved in Common Lisp with generic functions and
+multimethods.  I'll try to separate the classes, operations and their extensions
+into files roughly as in the Java example above, although one would perhaps do
+this differently in a real Lisp project.
+</p>
+
+<p>
+First, the class hierarchy:
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-lisp">(in-package shape)
+
+(defclass shape () ())
+</pre>
+</div>
+
+<div class="org-src-container">
+
+<pre class="src src-lisp">(in-package shape)
+
+(defclass square (shape)
+  ((width :initarg :width
+          :reader square-width)))
+</pre>
+</div>
+
+<div class="org-src-container">
+
+<pre class="src src-lisp">(in-package shape)
+
+(defclass circle (shape)
+  ((radius :initarg :radius
+           :reader circle-radius)))
+</pre>
+</div>
+
+<div class="org-src-container">
+
+<pre class="src src-lisp">(in-package shape)
+
+(defclass translated (shape)
+  ((shape :initarg :shape
+          :reader translated-shape)
+   (translation :initarg :translation
+                :reader translated-translation)))
+</pre>
+</div>
+
+<p>
+The point helper:
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-lisp">(in-package shape)
+
+(defclass point ()
+  ((x :initarg :x
+      :reader point-x)
+   (y :initarg :y
+      :reader point-y)))
+</pre>
+</div>
+
+<p>
+The first operation:
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-lisp">(in-package shape)
+
+(defgeneric point-in-p (point shape)
+  (:documentation "Returns whether the POINT lies within SHAPE."))
+
+(defmethod point-in-p ((point point) (square square))
+  (and (&lt; (- (/ (square-width square) 2))
+          (point-x point)
+          (/ (square-width square) 2))
+       (&lt; (- (/ (square-width square) 2))
+          (point-y point)
+          (/ (square-width square) 2))))
+
+(defmethod point-in-p ((point point) (circle circle))
+  (&lt; (sqrt (+ (expt (point-x point) 2)
+              (expt (point-y point) 2)))
+     (circle-radius circle)))
+
+(defmethod point-in-p ((point point) (translated translated))
+  (point-in-p (make-instance point
+                             :x (- (point-x point)
+                                   (point-x (translated-translation translated)))
+                             :y (- (point-y point)
+                                   (point-y (translated-translation translated))))
+              (translated-shape translated)))
+</pre>
+</div>
+
+<p>
+Adding an operation:
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-lisp">(in-package shape)
+
+(defgeneric shrink (shape factor)
+  (:documentation "Returns a copy of SHAPE shrunk by FACTOR."))
+
+(defmethod shrink :before ((shape t) factor)
+  (check-type factor (real (0) *)
+              "a positive real number"))
+
+(defmethod shrink ((square square) (factor real))
+  (make-instance 'square
+                 :width (/ (square-width square) factor)))
+
+(defmethod shrink ((circle circle) (factor real))
+  (make-instance 'circle
+                 :radius (/ (circle-radius circle) factor)))
+
+(defmethod shrink ((translated translated) (factor real))
+  (make-instance 'translated
+                 :shape (shrink (translated-shape translated) factor)
+                 :translation (translated-translation translated)))
+</pre>
+</div>
+
+<p>
+Adding a new class:
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-lisp">(in-package shape)
+
+(defclass union (shape)
+  ((shape0 :initarg :shape0
+           :reader union-shape0)
+   (shape1 :initarg :shape1
+           :reader union-shape1)))
+</pre>
+</div>
+
+<p>
+Adding the operations:
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-lisp">(in-package shape)
+
+(defmethod point-in-p ((point point) (union union))
+  (or (point-in-p point (union-shape0 union))
+      (point-in-p point (union-shape1 union))))
+</pre>
+</div>
+
+<div class="org-src-container">
+
+<pre class="src src-lisp">(in-package shape)
+
+(defmethod shrink ((union union) (factor real))
+  (make-instance 'union
+                 :shape0 (shrink (union-shape0 union) factor)
+                 :shape1 (shrink (union-shape1 union) factor)))
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-sec-4" class="outline-2">
+<h2 id="sec-4"><span class="section-number-2">4</span> Your thoughts</h2>
+<div class="outline-text-2" id="text-4">
+<p>
+Please, take a moment to compare what you have seen.  Maybe translate it to a
+language or syntax that you are more familiar with (Java is not for everyone).
+</p>
+
+<p>
+I shall continue after the break.
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-5" class="outline-2">
+<h2 id="sec-5"><span class="section-number-2">5</span> Comparison</h2>
+<div class="outline-text-2" id="text-5">
+<p>
+OK, break is over.
+</p>
+
+<p>
+The primary goal of the article I mentioned in the introduction was to design
+the code in such a way that a user can extend it without modifying or replacing
+existing code.  In a real-world sense, the basic shape definition, the square,
+circle, and translated shape, as well as the point-in operation might be part of
+a library, while the union shape and the shrink operation are parts of code that
+is using that library.
+</p>
+
+<p>
+This means that the Java library needs to be designed with such extensibility
+explicitly in mind.  Going through the motions of having the factory method in
+the visitor contract would otherwise not be obvious or worthwhile.  The Common
+Lisp library, on the other hand, would just be written the way shown, even if
+its author never thought about a user wanting to add shapes or operations.
+</p>
+
+<p>
+What if you want to further extend this functionality, for example: with an
+ellipse shape?  In the Java case, you can't just add <code>Ellipse</code>,
+<code>EllipseShapeVisitor&lt;T&gt;</code>, <code>PointInEllipse</code>, and <code>ShrinkEllipse</code>, because then
+you'd need to decide whether to use a <code>ShrinkEllipse</code> or a <code>ShrinkUnion</code>
+whenever you wish to shrink a Shape that you can only determine at runtime
+(e. g. iterating over a Collection&lt;Shape&gt;).  Instead, you end up with a
+MyProjectShapeShrinker that knows all your extensions.  If someone on your
+project overlooks the fact that someone else already (or in parallel) had added
+a ShrinkUnion visitor and adds the ShrinkEllipse visitor himself, you have a
+bug, where one part of the code understands one subset of shapes and a different
+part another.  Not only does this compile without warning, it also likely tests
+OK, since the tests added for each addition by itself would ignore the other
+just the same.
+</p>
+
+<p>
+With generic functions (the Common Lisp case), you just add the methods, and it
+works.  Programmer A adds a union shape, programmer B adds the ellipse shape,
+the code is merged, all functions continue to work .
+</p>
+
+<p>
+Another example: programmer A adds the union shape, but programmer B adds the
+shrink operation.
+</p>
+
+<p>
+In Java, A adds <code>Union</code>, <code>UnionShapeVisitor&lt;T&gt;</code>, and <code>PointInUnion</code>, while B
+adds <code>Shrink</code> (which implements <code>ShapeVisitor&lt;T&gt;</code>, so is missing a method for
+<code>Union</code>).  Again, this compiles fine and will likely test OK when the
+programmers are not aware of each other's development.  Some time later, you get
+a ClassCastException or an IllegalArgumentException, depending on how the
+visitors are implemented.
+</p>
+
+<p>
+This problem is about the same in Common Lisp, though: A adds <code>union</code>, B adds
+<code>shrink</code>, but the method that shrinks unions is missing.  Some time later, you
+get an error that there is no applicable method for <code>shrink</code> when given a
+<code>union</code>.
+</p>
+
+<p>
+The difference is the effort needed to correct the mistake: in Common Lisp, you
+add the missing method(s).  In Java, you need to make <code>Shrink</code> implement
+<code>UnionShapeVisitor&lt;T&gt;</code> instead of <code>ShapeVisitor&lt;T&gt;</code>, then add the method to this
+file.  It gets more involved when multiple shapes were added independently: you
+need to merge the different interfaces extending <code>ShapeVisitor&lt;T&gt;</code> as well as
+all their implementations and make all their call sites use the respective
+merged visitor.
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-6" class="outline-2">
+<h2 id="sec-6"><span class="section-number-2">6</span> Conclusion</h2>
+<div class="outline-text-2" id="text-6">
+<p>
+I am almost sorry that this comparison came out so one-sided, but I simply could
+not find a halfway convincing argument that made generic functions look inferior
+to the Visitor/Factory pattern in this kind of example.
+</p>
+
+<p>
+Really, I think this is so bad that one should regard the visitor pattern (with
+or without factory methods) as a hacky workaround for missing generic functions.
+The only reason that it is not really an antipattern is that there are no good
+alternatives in sight when you must use Java.
+</p>
+
+<p>
+I welcome all feedback, including demonstrations of solutions in other
+languages.  Just open an issue at
+<a href="http://github.com/Harleqin/Harleqin.github.io/issues">http://github.com/Harleqin/Harleqin.github.io/issues</a>.
+</p>
+
+
+<p>
+Yours aye
+</p>
+
+<p>
+Svante
+</p>
+</div>
+</div>
+</div>
+<div id="postamble" class="status">
+<p class="date">Date: 2015-12-30</p>
+<p class="author">Author: Svante</p>
+<p class="date">Created: 2015-12-30 Mi 23:31</p>
+<p class="creator"><a href="http://www.gnu.org/software/emacs/">Emacs</a> 24.5.1 (<a href="http://orgmode.org">Org</a> mode 8.2.10)</p>
+<p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
+</div>
+</body>
+</html>

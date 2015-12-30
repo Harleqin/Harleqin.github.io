@@ -1,0 +1,7 @@
+#+SETUPFILE: setup.org
+#+TITLE: Harleqin.github.io
+#+HTML_LINK_UP: https://Harleqin.github.io/
+
+* Essays
+
+[[file:2015-12-30-generic-functions-and-multimethods-versus-visitors-and-factories.org][Generic functions and multimethods versus visitors and factories]]

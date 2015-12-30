@@ -1,0 +1,5 @@
+#+AUTHOR: Svante
+#+HTML_DOCTYPE: html5
+#+HTML_LINK_HOME: https://Harleqin.github.io/
+#+HTML_HEAD_EXTRA: <style>body {max-width: 42em; margin: 0 auto;}</style>
+#+HTML_HEAD_EXTRA: <style>#content {padding: 1em; background-color: #ddd;}</style>

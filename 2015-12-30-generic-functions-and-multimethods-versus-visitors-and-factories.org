@@ -1,0 +1,540 @@
+#+SETUPFILE: setup.org
+#+TITLE: Generic functions and multimethods versus visitors and factories
+#+DATE: 2015-12-30
+#+HTML_LINK_UP: https://Harleqin.github.io/
+
+In the article “Synthesizing Object-Oriented and Functional Design to Promote
+Reuse” by Shriram Krishnamurthi et al. from 2003
+(http://www.cs.rice.edu/~cork/teachjava/2003/readings/visitor1.pdf) the authors
+propose a design pattern combining visitors with factory methods.
+
+I propose here that the problem they present is better solved through generic
+functions and multimethods.
+
+* Summary
+
+The concrete problem presented is one of those rather academic problems: a
+little class hierarchy based on shapes, and a few operations on them, the
+question being how to organize the code in such a way that extending it with a
+new class or with a new operation can be done without modification of existing
+code.
+
+The unspoken basic problem is to get (run-time) dispatch to the right method
+implementation for a given object, when (in “classical object-oriented”
+parlance) you cannot put the method into the object's class directly.
+
+The “classical object-oriented” solution proposed in the paper is roughly to use
+a visitor for selection of the right method and a factory method for selection
+of the right visitor.
+
+The solution I propose is to use generic functions and multimethods.  Generic
+functions and the methods defined on them can be written independently from the
+classes of the objects on which they operate.  They also do (run-time) dispatch
+on their arguments (in contrast to compile-time overloading).  The effect is
+that you “just call” the generic function on whatever objects occur at run-time,
+and the right method will be selected each time.  You can also write new methods
+for both generic functions and classes that are defined elsewhere, including the
+language standard.
+
+In the following, I'll write this out in code, first Java, then Common Lisp.
+
+* Java
+
+I use Java for the “classical” part, because it is the language from this family
+I am most familiar with.  In contrast to the article, I can use a more modern
+Java version that has “generics” (parametric polymorphism, has nothing to do
+with generic functions).
+
+First up, a little class hierarchy.  I use very basic language (no ~final~
+declarations, no nullness annotations, and direct field access for ~Point~), so
+that it stays somewhat readable on this page.
+
+#+BEGIN_SRC java
+  package shape;
+
+  /**
+   * A basic shape class.  Shapes are centered at the origin by default.
+   */
+  abstract class Shape {
+      <T> T accept (ShapeVisitor<T> visitor);
+  }
+#+END_SRC
+
+#+BEGIN_SRC java
+  package shape;
+
+  class Square extends Shape {
+      private double width;
+
+      Shape (double width) {
+          this.width = width;
+      }
+
+      <T> T accept (ShapeVisitor<T> visitor) {
+          return visitor.visit( this );
+      }
+
+      double getWidth () {
+          return this.width;
+      }
+  }
+#+END_SRC
+
+#+BEGIN_SRC java
+  package shape;
+
+  class Circle extends Shape {
+      private double radius;
+
+      Circle (double radius) {
+          this.radius = radius;
+      }
+
+      <T> T accept (ShapeVisitor<T> visitor) {
+          return visitor.visit( this );
+      }
+
+      double getRadius () {
+          return this.radius;
+      }
+  }
+#+END_SRC
+
+#+BEGIN_SRC java
+  package shape;
+
+  /**
+   * This represents a translated shape.
+   */
+  class Translated extends Shape {
+      private Shape shape;
+      private Point translation;
+
+      Translated (Shape shape, Point translation) {
+          this.shape = shape;
+          this.translation = translation;
+      }
+
+      <T> T accept (ShapeVisitor<T> visitor) {
+          return visitor.visit( this );
+      }
+
+      Shape getShape () {
+          return this.shape;
+      }
+
+      Point getTranslation () {
+          return this.translation;
+      }
+  }
+#+END_SRC
+
+This is a little helper:
+
+#+BEGIN_SRC java
+  package shape;
+
+  /**
+   * A two-dimensional vector.
+   */
+  class Point {
+      double x;
+      double y;
+
+      Point (double x, double y) {
+          this.x = x;
+          this.y = y;
+      }
+  }
+#+END_SRC
+
+We start out with one operation:
+
+#+BEGIN_SRC java
+  package shape;
+
+  /**
+   * Interface for operations on shapes.  Implementations should have private
+   * constructors and factory methods, so that extensions to existing visitors can
+   * still be applied recursively.
+   */
+  interface ShapeVisitor<T> {
+      T visit (Square square);
+      T visit (Circle circle);
+      T visit (Translated translated);
+  }
+#+END_SRC
+
+#+BEGIN_SRC java
+  package shape;
+
+  class PointIn implements ShapeVisitor<Boolean> {
+      protected Point point;
+
+      private PointIn (Point point) {
+          this.point = point;
+      }
+
+      PointIn makePointIn (Point point) {
+          return new PointIn( point );
+      }
+
+      Boolean visit (Square square) {
+          return point.x > -(square.getWidth / 2)
+              && point.x < (square.getWidth / 2)
+              && point.y > -(square.getWidth / 2)
+              && point.y < (square.getWidth / 2);
+      }
+
+      Boolean visit (Circle circle) {
+          return Math.sqrt( point.x ^ 2 + point.y ^ 2 ) < circle.getRadius();
+      }
+
+      Boolean visit (Translated translated) {
+          Point translation = translated.getTranslation();
+          Point untranslatedPoint = new Point( this.point.x - translation.x,
+                                               this.point.y - translation.y );
+          return translated.getShape().accept( makePointIn( untranslatedPoint ) );
+      }
+  }
+#+END_SRC
+
+Now we add another operation:
+
+#+BEGIN_SRC java
+  package shape;
+
+  class Shrink implements ShapeVisitor<Shape> {
+
+      protected double factor;
+
+      private Shrink (double factor) {
+          this.factor = factor;
+      }
+
+      Shrink makeShrink (double factor) {
+          if (factor == 0) {
+              throw new IllegalArgumentException();
+          }
+          return new Shrink<Shape>(factor);
+      }
+
+      Shape visit (Square square) {
+          return new Square( square.getWidth() / factor );
+      }
+
+      Shape visit (Circle circle) {
+          return new Circle( circle.getRadius() / factor );
+      }
+
+      Shape visit (Translated translated) {
+          return new Translated( translated.getShape().accept( makeShrink( factor ) ),
+                                 translated.getTranslation() );
+      }
+  }
+#+END_SRC
+
+Finally, we add another class:
+
+#+BEGIN_SRC java
+  package shape;
+
+  class Union extends Shape {
+      private Shape s0;
+      private Shape s1;
+
+      public Union (Shape s0, Shape s1) {
+          this.s0 = s0;
+          this.s1 = s1;
+      }
+
+      <T> accept (ShapeVisitor<T> visitor) {
+          // might throw a ClassCastException if improperly used
+          return ((UnionShapeVisitor) visitor).visit( this );
+      }
+
+      Shape getShape0 () {
+          return this.s0;
+      }
+
+      Shape getShape1 () {
+          return this.s1;
+      }
+  }
+#+END_SRC
+
+This needs extended visitors:
+
+#+BEGIN_SRC java
+  package shape;
+
+  interface UnionShapeVisitor<T> extends ShapeVisitor<T> {
+      T visit (Union union);
+  }
+#+END_SRC
+
+#+BEGIN_SRC java
+  package shape;
+
+  class PointInUnion extends PointIn implements UnionShapeVisitor<Boolean> {
+
+      private PointInUnion (Point point) {
+          this.point = point;
+      }
+
+      PointIn makePointIn (Point point) {
+          return new PointInUnion( point );
+      }
+
+      Boolean visit (Union union) {
+          return union.getShape0().accept( makePointIn( this.point ) )
+              || union.getShape1().accept( makePointIn( this.point ) );
+      }
+  }
+#+END_SRC
+
+#+BEGIN_SRC java
+  package shape;
+
+  class ShrinkUnion extends Shrink implements UnionShapeVisitor<Shape> {
+
+      private ShrinkUnion (double factor) {
+          this.factor = factor;
+      }
+
+      Shrink makeShrink (double factor) {
+          return new ShrinkUnion( factor );
+      }
+
+      Shape visit (Union union) {
+          return new Union( union.getShape0().accept( makeShrink( this.factor ) ),
+                            union.getShape1().accept( makeShrink( this.factor ) ) );
+      }
+  }
+#+END_SRC
+
+* Common Lisp
+
+Here is the same problem solved in Common Lisp with generic functions and
+multimethods.  I'll try to separate the classes, operations and their extensions
+into files roughly as in the Java example above, although one would perhaps do
+this differently in a real Lisp project.
+
+First, the class hierarchy:
+
+#+BEGIN_SRC lisp
+  (in-package shape)
+
+  (defclass shape () ())
+#+END_SRC
+
+#+BEGIN_SRC lisp
+  (in-package shape)
+
+  (defclass square (shape)
+    ((width :initarg :width
+            :reader square-width)))
+#+END_SRC
+
+#+BEGIN_SRC lisp
+  (in-package shape)
+
+  (defclass circle (shape)
+    ((radius :initarg :radius
+             :reader circle-radius)))
+#+END_SRC
+
+#+BEGIN_SRC lisp
+  (in-package shape)
+
+  (defclass translated (shape)
+    ((shape :initarg :shape
+            :reader translated-shape)
+     (translation :initarg :translation
+                  :reader translated-translation)))
+#+END_SRC
+
+The point helper:
+
+#+BEGIN_SRC lisp
+  (in-package shape)
+
+  (defclass point ()
+    ((x :initarg :x
+        :reader point-x)
+     (y :initarg :y
+        :reader point-y)))
+#+END_SRC
+
+The first operation:
+
+#+BEGIN_SRC lisp
+  (in-package shape)
+
+  (defgeneric point-in-p (point shape)
+    (:documentation "Returns whether the POINT lies within SHAPE."))
+
+  (defmethod point-in-p ((point point) (square square))
+    (and (< (- (/ (square-width square) 2))
+            (point-x point)
+            (/ (square-width square) 2))
+         (< (- (/ (square-width square) 2))
+            (point-y point)
+            (/ (square-width square) 2))))
+
+  (defmethod point-in-p ((point point) (circle circle))
+    (< (sqrt (+ (expt (point-x point) 2)
+                (expt (point-y point) 2)))
+       (circle-radius circle)))
+
+  (defmethod point-in-p ((point point) (translated translated))
+    (point-in-p (make-instance point
+                               :x (- (point-x point)
+                                     (point-x (translated-translation translated)))
+                               :y (- (point-y point)
+                                     (point-y (translated-translation translated))))
+                (translated-shape translated)))
+#+END_SRC
+
+Adding an operation:
+
+#+BEGIN_SRC lisp
+  (in-package shape)
+
+  (defgeneric shrink (shape factor)
+    (:documentation "Returns a copy of SHAPE shrunk by FACTOR."))
+
+  (defmethod shrink :before ((shape t) factor)
+    (check-type factor (real (0) *)
+                "a positive real number"))
+
+  (defmethod shrink ((square square) (factor real))
+    (make-instance 'square
+                   :width (/ (square-width square) factor)))
+
+  (defmethod shrink ((circle circle) (factor real))
+    (make-instance 'circle
+                   :radius (/ (circle-radius circle) factor)))
+
+  (defmethod shrink ((translated translated) (factor real))
+    (make-instance 'translated
+                   :shape (shrink (translated-shape translated) factor)
+                   :translation (translated-translation translated)))
+#+END_SRC
+
+Adding a new class:
+
+#+BEGIN_SRC lisp
+  (in-package shape)
+
+  (defclass union (shape)
+    ((shape0 :initarg :shape0
+             :reader union-shape0)
+     (shape1 :initarg :shape1
+             :reader union-shape1)))
+#+END_SRC
+
+Adding the operations:
+
+#+BEGIN_SRC lisp
+  (in-package shape)
+
+  (defmethod point-in-p ((point point) (union union))
+    (or (point-in-p point (union-shape0 union))
+        (point-in-p point (union-shape1 union))))
+#+END_SRC
+
+#+BEGIN_SRC lisp
+  (in-package shape)
+
+  (defmethod shrink ((union union) (factor real))
+    (make-instance 'union
+                   :shape0 (shrink (union-shape0 union) factor)
+                   :shape1 (shrink (union-shape1 union) factor)))
+#+END_SRC
+
+* Your thoughts
+
+Please, take a moment to compare what you have seen.  Maybe translate it to a
+language or syntax that you are more familiar with (Java is not for everyone).
+
+I shall continue after the break.
+
+* Comparison
+
+OK, break is over.
+
+The primary goal of the article I mentioned in the introduction was to design
+the code in such a way that a user can extend it without modifying or replacing
+existing code.  In a real-world sense, the basic shape definition, the square,
+circle, and translated shape, as well as the point-in operation might be part of
+a library, while the union shape and the shrink operation are parts of code that
+is using that library.
+
+This means that the Java library needs to be designed with such extensibility
+explicitly in mind.  Going through the motions of having the factory method in
+the visitor contract would otherwise not be obvious or worthwhile.  The Common
+Lisp library, on the other hand, would just be written the way shown, even if
+its author never thought about a user wanting to add shapes or operations.
+
+What if you want to further extend this functionality, for example: with an
+ellipse shape?  In the Java case, you can't just add ~Ellipse~,
+~EllipseShapeVisitor<T>~, ~PointInEllipse~, and ~ShrinkEllipse~, because then
+you'd need to decide whether to use a ~ShrinkEllipse~ or a ~ShrinkUnion~
+whenever you wish to shrink a Shape that you can only determine at runtime
+(e. g. iterating over a Collection<Shape>).  Instead, you end up with a
+MyProjectShapeShrinker that knows all your extensions.  If someone on your
+project overlooks the fact that someone else already (or in parallel) had added
+a ShrinkUnion visitor and adds the ShrinkEllipse visitor himself, you have a
+bug, where one part of the code understands one subset of shapes and a different
+part another.  Not only does this compile without warning, it also likely tests
+OK, since the tests added for each addition by itself would ignore the other
+just the same.
+
+With generic functions (the Common Lisp case), you just add the methods, and it
+works.  Programmer A adds a union shape, programmer B adds the ellipse shape,
+the code is merged, all functions continue to work .
+
+Another example: programmer A adds the union shape, but programmer B adds the
+shrink operation.
+
+In Java, A adds ~Union~, ~UnionShapeVisitor<T>~, and ~PointInUnion~, while B
+adds ~Shrink~ (which implements ~ShapeVisitor<T>~, so is missing a method for
+~Union~).  Again, this compiles fine and will likely test OK when the
+programmers are not aware of each other's development.  Some time later, you get
+a ClassCastException or an IllegalArgumentException, depending on how the
+visitors are implemented.
+
+This problem is about the same in Common Lisp, though: A adds ~union~, B adds
+~shrink~, but the method that shrinks unions is missing.  Some time later, you
+get an error that there is no applicable method for ~shrink~ when given a
+~union~.
+
+The difference is the effort needed to correct the mistake: in Common Lisp, you
+add the missing method(s).  In Java, you need to make ~Shrink~ implement
+~UnionShapeVisitor<T>~ instead of ~ShapeVisitor<T>~, then add the method to this
+file.  It gets more involved when multiple shapes were added independently: you
+need to merge the different interfaces extending ~ShapeVisitor<T>~ as well as
+all their implementations and make all their call sites use the respective
+merged visitor.
+
+* Conclusion
+
+I am almost sorry that this comparison came out so one-sided, but I simply could
+not find a halfway convincing argument that made generic functions look inferior
+to the Visitor/Factory pattern in this kind of example.
+
+Really, I think this is so bad that one should regard the visitor pattern (with
+or without factory methods) as a hacky workaround for missing generic functions.
+The only reason that it is not really an antipattern is that there are no good
+alternatives in sight when you must use Java.
+
+I welcome all feedback, including demonstrations of solutions in other
+languages.  Just open an issue at
+http://github.com/Harleqin/Harleqin.github.io/issues.
+
+
+Yours aye
+
+Svante
+
